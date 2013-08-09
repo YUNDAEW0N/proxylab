@@ -9,26 +9,26 @@
 void unix_error(char *msg) /* unix-style error */
 {
     fprintf(stderr, "%s: %s\n", msg, strerror(errno));
-    exit(0);
+    //exit(0);
 }
 /* $end unixerror */
 
 void posix_error(int code, char *msg) /* posix-style error */
 {
     fprintf(stderr, "%s: %s\n", msg, strerror(code));
-    exit(0);
+    //exit(0);
 }
 
 void dns_error(char *msg) /* dns-style error */
 {
     fprintf(stderr, "%s: DNS error %d\n", msg, h_errno);
-    exit(0);
+    //exit(0);
 }
 
 void app_error(char *msg) /* application error */
 {
     fprintf(stderr, "%s\n", msg);
-    exit(0);
+    //exit(0);
 }
 /* $end errorfuns */
 
@@ -430,11 +430,26 @@ void Connect(int sockfd, struct sockaddr *serv_addr, int addrlen)
  ***********************/
 
 /* $begin gethostbyname */
+struct hostent *gethostbyname_ts(const char *name)
+{
+	sem_t mutex;
+	Sem_init(&mutex, 0 , 1);
+	
+	struct hostent* shared, * unsharedp;
+    unsharedp = Malloc(sizeof(struct hostent));
+    P(&mutex);
+    if ((shared = gethostbyname(name)) == NULL)
+		dns_error("Gethostbyname error");
+    *unsharedp = * shared;
+    V(&mutex);
+    return unsharedp;
+}
+
 struct hostent *Gethostbyname(const char *name) 
 {
     struct hostent *p;
 
-    if ((p = gethostbyname(name)) == NULL)
+    if ((p = gethostbyname_ts(name)) == NULL)
 	dns_error("Gethostbyname error");
     return p;
 }
@@ -682,15 +697,29 @@ ssize_t Rio_readn(int fd, void *ptr, size_t nbytes)
 {
     ssize_t n;
   
-    if ((n = rio_readn(fd, ptr, nbytes)) < 0)
-	unix_error("Rio_readn error");
+    if ((n = rio_readn(fd, ptr, nbytes)) < 0) {
+		if(errno != EPIPE && errno != ECONNRESET)
+			unix_error("Rio_readn error");
+		else if(errno == EPIPE)
+			unix_error("Rio_readn SIGPIPE error");
+		else
+			unix_error("Rio_readn ECONNRESET error");
+	}
     return n;
 }
 
-void Rio_writen(int fd, void *usrbuf, size_t n) 
+ssize_t Rio_writen(int fd, void *usrbuf, size_t n) 
 {
-    if (rio_writen(fd, usrbuf, n) != n)
-	unix_error("Rio_writen error");
+	int tmp = rio_writen(fd, usrbuf, n);
+    if (tmp != n) {
+		if(errno != EPIPE && errno != ECONNRESET)
+			unix_error("Rio_writen error");
+		else if(errno == EPIPE)
+			unix_error("Rio_writen SIGPIPE error");
+		else
+			unix_error("Rio_writen ECONNRESET error");
+	}
+	return tmp;
 }
 
 void Rio_readinitb(rio_t *rp, int fd)
@@ -702,8 +731,14 @@ ssize_t Rio_readnb(rio_t *rp, void *usrbuf, size_t n)
 {
     ssize_t rc;
 
-    if ((rc = rio_readnb(rp, usrbuf, n)) < 0)
-	unix_error("Rio_readnb error");
+    if ((rc = rio_readnb(rp, usrbuf, n)) < 0){
+		if(errno != EPIPE && errno != ECONNRESET)
+			unix_error("Rio_readnb error");
+		else if(errno == EPIPE)
+			unix_error("Rio_readnb SIGPIPE error");
+		else
+			unix_error("Rio_readnb ECONNRESET error");
+	}
     return rc;
 }
 
@@ -711,8 +746,14 @@ ssize_t Rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
 {
     ssize_t rc;
 
-    if ((rc = rio_readlineb(rp, usrbuf, maxlen)) < 0)
-	unix_error("Rio_readlineb error");
+    if ((rc = rio_readlineb(rp, usrbuf, maxlen)) < 0) {
+		if(errno != EPIPE && errno != ECONNRESET)
+			unix_error("Rio_readlineb error");
+		else if(errno == EPIPE)
+			unix_error("Rio_readlineb SIGPIPE error");
+		else
+			unix_error("Rio_readlineb ECONNRESET error");
+	}
     return rc;
 } 
 
@@ -736,7 +777,7 @@ int open_clientfd(char *hostname, int port)
 	return -1; /* check errno for cause of error */
 
     /* Fill in the server's IP address and port */
-    if ((hp = gethostbyname(hostname)) == NULL)
+    if ((hp = Gethostbyname(hostname)) == NULL)
 	return -2; /* check h_errno for cause of error */
     bzero((char *) &serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
