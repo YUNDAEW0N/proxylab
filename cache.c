@@ -63,7 +63,7 @@ c_node *search_node(c_list *list, char *index) {
 
 void add_node(c_node *node, c_list *list){
 	if(list) {
-		pthread_rwlock_wrlock((list->lock));
+		//pthread_rwlock_wrlock((list->lock));
 		if(node){
 			while(list->bytes_left < node->length) {
 				c_node *tmp_node = evict_list(list);
@@ -80,13 +80,13 @@ void add_node(c_node *node, c_list *list){
 				list->bytes_left -= node->length;
 			}
 		}
-		pthread_rwlock_unlock((list->lock));
+		//pthread_rwlock_unlock((list->lock));
 	}
 }
 
 c_node *remove_node(char *index, c_list *list){
 	if(list){
-		pthread_rwlock_wrlock((list->lock));
+		//pthread_rwlock_wrlock((list->lock));
 		c_node *tmp = search_node(list, index);
 		if(tmp) {
 			if(tmp == list->head)
@@ -100,8 +100,10 @@ c_node *remove_node(char *index, c_list *list){
 					list->tail = tmp->prev;
 				list->bytes_left += tmp->length;
 			}
+			tmp->prev = NULL;
+			tmp->next = NULL;
 		}
-		pthread_rwlock_unlock((list->lock));
+		//pthread_rwlock_unlock((list->lock));
 		return tmp;
 	}
 	
@@ -143,7 +145,9 @@ int read_node_content(c_list *list, char *index, char *content, unsigned int *le
 	
 	pthread_rwlock_unlock((list->lock));
 	
+	pthread_rwlock_wrlock((list->lock));
 	add_node(remove_node(index, list), list);
+	pthread_rwlock_unlock((list->lock));
 	
 	return 0;
 }
@@ -161,6 +165,9 @@ int insert_content_node(c_list *list, char *index, char *content, unsigned int l
 		
 	tmp->content = Malloc(sizeof(char)*len);
 	memcpy(tmp->content, content,len);
+
+	pthread_rwlock_wrlock((list->lock));
 	add_node(tmp, list);
+	pthread_rwlock_unlock((list->lock));
 	return 0;
 }

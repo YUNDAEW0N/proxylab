@@ -1,3 +1,14 @@
+/* AnrewID:ruiz1
+ * Name:Rui Zhang
+ *
+ * Content:
+ * 1. Implement my own thread-safe getbyhostname function getbyhostname_ts
+ * 2. Modify the writen,readn,readlineb,readnb to recognize EPIPE and ECONNRESET *    errors
+ * 3. Modify the error functions not to terminate
+ * 4. Implement the concurrent proxy program
+ * 5. Implement the cache
+ */
+
 #include <stdio.h>
 
 #include "cache.h"
@@ -144,7 +155,7 @@ void proxy_process(int *arg){
 				int f_value = read_and_forward_response(server_fd, client_fd, cache_index, content);
 				if (f_value == -1)
 					fprintf(stderr, "forward content to client error.\n");
-				else if (f_value == -2)
+				else if (f_value == -2 && cache_list)
 					fprintf(stderr, "save content to cache error.\n");
 			}
 		}
